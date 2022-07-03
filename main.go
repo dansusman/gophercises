@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
+	"strings"
 	"time"
 )
 
 
-type Question struct {
+type question struct {
     prompt string
     expected string
 }
@@ -19,7 +21,7 @@ type Question struct {
 type quiz struct {
     answers int
     correct int
-    questions []Question
+    questions []question
 }
 
 
@@ -47,7 +49,7 @@ func readQuiz(filePath string) *quiz {
             panic(err)
         }
 
-        question := Question{
+        question := question{
             prompt: record[0],
             expected: record[1],
         }
@@ -69,6 +71,11 @@ quizLoop:
             // accept user input
             var answer string
             fmt.Scanln(&answer)
+
+            // ensure extra whitespace, capitalization, etc. are 
+            // not considered incorrect
+            answer = strings.ToLower(answer)
+            answer = strings.TrimSpace(answer)
             answerChan <- answer
         }()
 
@@ -88,7 +95,15 @@ quizLoop:
     }
 }
 
-func (quiz *quiz) access() {
+func (quiz *quiz) shuffle() {
+    rand.Seed(time.Now().UnixNano())
+    rand.Shuffle(len(quiz.questions), func(i, j int) { 
+        quiz.questions[i], quiz.questions[j] = quiz.questions[j], quiz.questions[i]
+    })
+
+}
+
+func (quiz *quiz) assess() {
     fmt.Printf(
 		"You answered %v questions out of a total of %v and got %v correct\n",
 		quiz.answers,
@@ -100,12 +115,16 @@ func (quiz *quiz) access() {
 var (
     filePathPtr = flag.String("csv", "./problems.csv", "File Path for CSV")
     duration = flag.Int("time", 30, "Time Limit for Quiz")
+    shuffle = flag.Bool("shuffle", false, "Shuffle the Quiz Questions")
 )
 
 func main() {
     flag.Parse()
     quiz := readQuiz(*filePathPtr)
+    if *shuffle {
+        quiz.shuffle()
+    }
     quiz.run()
-    quiz.access()
+    quiz.assess()
 }
 
