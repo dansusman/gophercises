@@ -2,11 +2,12 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strconv"
+	"time"
 )
 
 
@@ -18,7 +19,6 @@ type Question struct {
 type quiz struct {
     answers int
     correct int
-    total int
     questions []Question
 }
 
@@ -52,51 +52,59 @@ func readQuiz(filePath string) *quiz {
             expected: record[1],
         }
         quiz.questions = append(quiz.questions, question)
-        quiz.total = len(quiz.questions)
     }
     return &quiz
 }
 
 func (quiz *quiz) run() {
+    timer := time.NewTimer(time.Duration(*duration) * time.Second)
+quizLoop:
     for _, question := range quiz.questions {
         // print prompt
         fmt.Print(question.prompt + " ")
 
-        // accept user input
-        var answer string
-        fmt.Scanln(&answer)
+        answerChan := make(chan string)
 
-        // convert string -> int
-        strconv.Atoi(answer)
+        go func() {
+            // accept user input
+            var answer string
+            fmt.Scanln(&answer)
+            answerChan <- answer
+        }()
 
-        // compare to question.expected, increment correct if needed
-        if answer == question.expected {
-            quiz.correct += 1
-        }
-        if answer != "" {
-            quiz.answers += 1
+        select {
+        case <-timer.C:
+            fmt.Println()
+            break quizLoop
+        case answer := <-answerChan:
+            // compare to question.expected, increment correct if needed
+            if answer == question.expected {
+                quiz.correct += 1
+            }
+            if answer != "" {
+                quiz.answers += 1
+            }
         }
     }
 }
 
 func (quiz *quiz) access() {
     fmt.Printf(
-		"You answered %v questions out of a total of %v and got %v correct",
+		"You answered %v questions out of a total of %v and got %v correct\n",
 		quiz.answers,
-        quiz.total,
+        len(quiz.questions),
 		quiz.correct,
 	)
 }
 
+var (
+    filePathPtr = flag.String("csv", "./problems.csv", "File Path for CSV")
+    duration = flag.Int("time", 30, "Time Limit for Quiz")
+)
+
 func main() {
-    filePath := "./problems.csv"
-
-    if len(os.Args) > 1 {
-        filePath = os.Args[1]
-    }
-
-    quiz := readQuiz(filePath)
-
+    flag.Parse()
+    quiz := readQuiz(*filePathPtr)
     quiz.run()
     quiz.access()
 }
